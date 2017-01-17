@@ -1,0 +1,100 @@
+---
+title: "PML Assignment2"
+author: "Martijn"
+date: "9 januari 2017"
+output: html_document
+---
+## Course Project Practical Machine Learning
+
+#### Introduction and sypnosis
+The datasets are the results from an experiment described here: `http://groupware.les.inf.puc-rio.br/har`
+In short, there were 6 participants who where asked to do a repeated Unilateral Dumbbell Biceps Curl exercise in 5 different ways, each labeled by a letter: A, B, C, D and E.
+A is exactly according to the explanation, while B-E are all faulty in a different way. In this course project, we're going to create two models to learn from the data in order to predict in which manner a participant performed his/her exercises.
+
+#### Download the files and read them
+```{r}
+
+if (!file.exists("pml_training.csv")) {
+    download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv", 
+                  destfile = "pml_training.csv")
+}
+
+if(!file.exists("pml_testing.csv")) {
+    download.file('https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv', 
+    destfile = "pml_testing.csv")
+}
+
+training <- read.csv("pml_training.csv", na.strings = c("NA", "", "#DIV/0!"))
+testing <- read.csv("pml_testing.csv", na.strings = c("NA", "", "#DIV/0!"))
+```
+
+## Exploratory Data analysis
+Let's observe the data to get an idea what is contained in each of the datasets.
+```{r}
+str(training)
+library(caret)
+library(rpart)
+library(randomForest)
+library(rattle) 
+set.seed(95831)
+```
+
+## Reshaping the data
+As we observe from the data structure, these datasets contains a large amount of NA's. Some variables/columns consist almost solely out of NA's and thus don't seem to be important in estimation and prediction.
+First I decide to remove those columns that contain over 90% NA values from the testing set.
+Next, I remove the first columns, containg names and dates, as we wish to predict the type of action performed based on the data measured by the tool/app.
+Finally, I apply the same filters to the training datase:
+
+```{r}
+new_test <- testing[, colSums(is.na(testing)) < 0.8 * nrow(testing)]
+columns2brm <- colnames(testing[, colSums(is.na(testing)) > 0.8*nrow(testing)])
+columns2brm <- c(columns2brm)
+new_train <- training[, !(colnames(training) %in% columns2brm)]
+testing <- testing[, !(colnames(testing) %in% columns2brm)]
+new_testing <- testing[,-60]
+new_testing <- new_testing[, -c(1:7)]
+new_training <- new_train[, -c(1:7)]
+```
+
+Now that the training and testing datasets contain the same variables, I will divide the training set in a train and test set as well, in order to validate the accuracy of fitted models.
+
+```{r}
+set.seed(97531)
+inTrain <- createDataPartition(y= new_train$classe, p = 0.6, list = FALSE)
+train_train <- new_train[inTrain,]
+test_train <- new_train[-inTrain,]
+
+inTrain <- createDataPartition(y= new_training$classe, p = 0.6, list = FALSE)
+train_train <- new_training[inTrain,]
+test_train <- new_training[-inTrain,]
+```
+
+Now we try fitting a classification tree:
+
+```{r fig.width=18, fig.height=18}
+## rpart
+rpy <- rpart(classe ~ ., data = train_train, method = "class")
+fancyRpartPlot(rpy, main = "Decision Tree", cex = 0.75)
+prp <- predict(rpy, newdata = test_train, type = "class")
+confusionMatrix(data = prp, reference = test_train$classe)
+```
+
+Using a classification tree, we get an accuracy of approximately 75%, which means that the out of sample error is approximately 25%. Since we aim for a higher accuracy, we'll try fitting a random forest model. Since there is a chance of overfitting, I'll use cross-validation with 4 folds in the dataset.
+
+```{r}
+### random forest
+rf_mod <- train(classe ~ ., method="rf", data=train_train, trControl=trainControl(method = "cv", number = 4))
+plot(rf_mod)
+prf <- predict(rf_mod$finalModel, newdata = test_train, type = "class")
+conf_mat <- confusionMatrix(prf, reference = test_train$classe)
+conf_mat
+```
+
+Clearly, the random forest is the more accurate model of the 2 with an observed accuracy of `r round(conf_mat$overall[1],2)`%. Therefore the out of sample error is quite low (`r (1 - round(conf_mat$overall[1],2))`) and we wish to use this model to predict  the `classe` outcomes of the 20 test cases. I expect the out of sample error to be similarly low as this model accurately predicted another validated subset of the dataset.
+The following values are the predicted type of exercise the subjects performed, based on the available data:
+
+```{r}
+set.seed(97531)
+final_prediction <- predict(rf_mod$finalModel, newdata = new_testing)
+final_prediction
+```
