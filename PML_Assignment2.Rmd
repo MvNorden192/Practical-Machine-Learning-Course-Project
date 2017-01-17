@@ -41,7 +41,7 @@ set.seed(95831)
 
 ## Reshaping the data
 As we observe from the data structure, these datasets contains a large amount of NA's. Some variables/columns consist almost solely out of NA's and thus don't seem to be important in estimation and prediction.
-First I decide to remove those columns that contain over 90% NA values from the testing set.
+First I decide to remove those columns that contain over 80% NA values from the testing set.
 Next, I remove the first columns, containg names and dates, as we wish to predict the type of action performed based on the data measured by the tool/app.
 Finally, I apply the same filters to the training datase:
 
